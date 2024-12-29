@@ -1,0 +1,142 @@
+#Packages
+import rasterio
+from rasterio.enums import Resampling
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+#Open files
+ruta_raster = 'F:/Viana_veg.tif'
+with rasterio.open(ruta_raster) as src:
+    ancho = src.width   
+    alto = src.height   
+    res_x, res_y = src.res  
+    crs = src.crs  
+
+num_pixeles = ancho * alto
+
+area_km2 = (ancho * res_x) * (alto * res_y) / 1e6  
+
+print(f"Size pixel: {res_x} x {res_y} (units CRS)")
+print(f"Number pixel: {num_pixeles}")
+print(f"Area km2: {area_km2:.2f} km²")
+print(f"Proyection CRS: {crs}")
+
+ruta_raster = 'C:/NDVI_Dron2022.tif'
+with rasterio.open(ruta_raster) as src:
+    ancho = src.width   
+    alto = src.height   
+    res_x, res_y = src.res  
+    crs = src.crs  
+
+num_pixeles = ancho * alto
+
+area_km2 = (ancho * res_x) * (alto * res_y) / 1e6  
+
+print(f"Size pixel: {res_x} x {res_y} (units CRS)")
+print(f"Number pixel: {num_pixeles}")
+print(f"Area km2: {area_km2:.2f} km²")
+print(f"Proyection CRS: {crs}")
+
+ruta_raster = 'C:/NDVI_Sat2022.tif'
+with rasterio.open(ruta_raster) as src:
+    ancho = src.width   
+    alto = src.height   
+    res_x, res_y = src.res  
+    crs = src.crs  
+
+num_pixeles = ancho * alto
+
+area_km2 = (ancho * res_x) * (alto * res_y) / 1e6  
+
+print(f"Size pixel: {res_x} x {res_y} (units CRS)")
+print(f"Number pixel: {num_pixeles}")
+print(f"Area km2: {area_km2:.2f} km²")
+print(f"Proyection CRS: {crs}")
+
+#Statistic calculate
+raster_dron = r'C:/NDVI_Dron2022Resample.tif'
+raster_satelite = r'C:/NDVI_Sat2022.tif'
+
+def calcular_estadisticas(raster_path):
+    with rasterio.open(raster_path) as src:
+        data = src.read(1)  
+        nodata_value = src.nodata
+        if nodata_value is not None:
+            data = data[data != nodata_value]
+        
+        min_value = np.min(data)
+        max_value = np.max(data)
+        mean_value = np.mean(data)
+        std_dev_value = np.std(data)
+        
+        return min_value, max_value, mean_value, std_dev_value
+
+min_dron, max_dron, mean_dron, std_dron = calcular_estadisticas(raster_dron)
+min_satelite, max_satelite, mean_satelite, std_satelite = calcular_estadisticas(raster_satelite)
+
+result = {
+    "Raster": ["NDVI Dron", "NDVI Satelite"],
+    "Min": [min_dron, min_satelite],
+    "Max": [max_dron, max_satelite],
+    "Mean": [mean_dron, mean_satelite],
+    "Standard Deviation": [std_dron, std_satelite]
+}
+
+df = pd.DataFrame(result)
+
+output_excel = r'C:/stadistics_rasters.xlsx'
+
+df.to_excel(output_excel, index=False)
+
+print(f"Keep statistic: {output_excel}")
+
+#Count pixel
+raster_10m_path = 'C:/NDVI_2022_Sentinel.tif'
+raster_4cm_path = 'F:/Viana_veg.tif'
+
+with rasterio.open(raster_10m_path) as src_10m:
+    ndvi_10m = src_10m.read(1)  
+    height_10m, width_10m = ndvi_10m.shape  
+
+with rasterio.open(raster_4cm_path) as src_4cm:
+    ndvi_4cm_resampled = src_4cm.read(
+        1, 
+        out_shape=(height_10m, width_10m), 
+        resampling=Resampling.mode  
+    )
+
+print(ndvi_4cm_resampled.shape)
+
+zone_counts = []
+
+for i in range(height_10m):
+    for j in range(width_10m):
+        zone_value = ndvi_10m[i, j]
+        
+        window_4cm = ndvi_4cm_resampled[i * 10:(i + 1) * 10, j * 10:(j + 1) * 10]
+        
+        vegetation_count = np.sum(window_4cm == 1)
+        
+        zone_counts.append([zone_value, vegetation_count])
+
+df = pd.DataFrame(zone_counts, columns=['NDVI_10m', 'Vegetation_Counts'])
+
+print(df.head())
+
+#Count pixel vegetation
+statistics = df.groupby('NDVI_10m').agg({
+    'Vegetation_Counts': 'sum'  
+}).reset_index()
+
+print(statistics)
+
+#Scatter plot
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=df, x='NDVI_10m', y='Vegetation_Counts', hue='NDVI_10m', palette="viridis", size='Vegetation_Counts', sizes=(50, 200))
+plt.title("NDVI 10m vs Vegetation Count (4 cm)", fontsize=16)
+plt.xlabel("NDVI 10m", fontsize=14)
+plt.ylabel("Vegetation Count (4 cm)", fontsize=14)
+plt.legend(title="NDVI 10m")
+plt.show()
